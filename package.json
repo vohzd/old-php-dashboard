@@ -1,0 +1,11 @@
+{
+    "name": "old-php-dashboard",
+    "version": "1.0.0",
+    "description": "Legacy PHP Dashboard",
+    "scripts": {
+        "start": "php -S localhost:8000 router.php"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC"
+}

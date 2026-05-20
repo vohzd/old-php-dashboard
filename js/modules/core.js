@@ -1,19 +1,17 @@
 // root domain
-var rootDomain = "http://localhost/";
-//var rootDomain = "http://intheon.uk";
+var rootDomain = "";
+//var rootDomain = "http://localhost/";
 
 // determine if offline mode should be used - not implemented yet
-var internetStatus = (navigator.onLine ? true : false);
+var internetStatus = navigator.onLine ? true : false;
 
 var Meta = {
-	panels: 0
-}
+  panels: 0,
+};
 // My own little plugin to interact with the rest api
 var UserManager = {
-
- 	ajaxHandler: function(method, endpoint, payload, callback, authorisation)
-	{
-	/*
+  ajaxHandler: function (method, endpoint, payload, callback, authorisation) {
+    /*
 		Because at the end of the day, the server still is king!
 		@method - whether get, post, put, or delete.
 		@endpoint - where abouts on the api you want to fire the request to.
@@ -21,345 +19,319 @@ var UserManager = {
 		@callback - the function to handle the server response
 		@authorisation - our cookie of a token to reidentify the user
 	*/
-		$.ajax({
-			type: 	method, 
-			url: 	rootDomain + endpoint,
-			headers:{
-				Authorization: authorisation
-			},
-			data: 	{
-				payload: 	payload
-			},
-			success: function(response){
-				callback(response);
-			},
-			error: function(response)
-			{
-				console.log("server sez: ", response);
-				if (response.status == 401) window.location = "login.php";
-			},
-			statusCode: function(status)
-			{
-				console.log(status);
-			}
-		});
-	},
+    $.ajax({
+      type: method,
+      url: rootDomain + endpoint,
+      headers: {
+        Authorization: authorisation,
+      },
+      data: {
+        payload: payload,
+      },
+      success: function (response) {
+        callback(response);
+      },
+      error: function (response) {
+        console.log("server sez: ", response);
+        if (response.status == 401) window.location = "login.php";
+      },
+      statusCode: function (status) {
+        console.log(status);
+      },
+    });
+  },
 
-	usersAuth: function()
-	{
-		var cookie = JSON.parse($.cookie("authToken"));
-		var cookieString = $.cookie("authToken");
+  usersAuth: function () {
+    var cookie = JSON.parse($.cookie("authToken"));
+    var cookieString = $.cookie("authToken");
 
-		document.title = "Welcome home, " + cookie.username;
-		$("#userName").html(cookie.username);
+    document.title = "Welcome home, " + cookie.username;
+    $("#userName").html(cookie.username);
 
-		return {
-			cookie: cookie,
-			cookieString: cookieString
-		}
-	},
+    return {
+      cookie: cookie,
+      cookieString: cookieString,
+    };
+  },
 
-	signOut: function()
-	{
-		var result = $.removeCookie("authToken");
-		console.log(result);
+  signOut: function () {
+    var result = $.removeCookie("authToken");
+    console.log(result);
 
-		if (result) window.location = "login.php";
-	},
+    if (result) window.location = "login.php";
+  },
 
+  getUsersProfile: function (pCallback) {
+    var auth = UserManager.usersAuth();
+    UserManager.ajaxHandler("GET", "rest-backend/api/user/" + auth.cookie.username, null, pCallback, auth.cookieString);
+  },
 
-	getUsersProfile: function(pCallback)
-	{
-		var auth = UserManager.usersAuth();
-		UserManager.ajaxHandler("GET", "rest-backend/api/user/" + auth.cookie.username, null, pCallback, auth.cookieString);
-	},
+  getUsersWidgets: function (wCallback) {
+    var auth = UserManager.usersAuth();
+    UserManager.ajaxHandler("GET", "rest-backend/api/widget" + auth.cookie.username, null, wCallback, auth.cookieString);
+  },
 
-	getUsersWidgets: function(wCallback)
-	{
-		var auth = UserManager.usersAuth();
-		UserManager.ajaxHandler("GET", "rest-backend/api/widget" + auth.cookie.username, null, wCallback, auth.cookieString);
-	},
+  parseUsersProfile: function (profile) {
+    if (profile == "nowidgets") UserManager.introduction();
+    else {
+      var asObj = JSON.parse(profile);
+      for (var item in asObj) UserManager.loadWidget(asObj[item]);
+    }
+  },
 
-	parseUsersProfile: function(profile)
-	{
-		if (profile == "nowidgets") UserManager.introduction()
-		else
-		{
-			var asObj = JSON.parse(profile);
-			for (var item in asObj) UserManager.loadWidget(asObj[item]);
+  createStatistic: function (label, value) {
+    // create the bastard initially
+    if ($("#" + label + "Stat").length === 0) {
+      $(".statistics-info").append(
+        "<div class='stat-item ui tiny statistic' id='" +
+          label +
+          "Stat'>\
+				<div class='value'>" +
+          value +
+          "</div>\
+				<div class='label'>" +
+          label +
+          "</div>\
+			</div>"
+      );
+    } // then just update its value
+    else {
+      $("#" + label + "Stat .value").html(value);
+    }
+  },
 
+  decrementStatistic: function (label) {
+    var current = $("#" + label + "Stat .value")[0].innerText;
 
-		}
-	},
+    current--;
 
-	createStatistic: function(label, value)
-	{
-		// create the bastard initially
-		if ($("#" + label + "Stat").length === 0)
-		{
-			$(".statistics-info").append("<div class='stat-item ui tiny statistic' id='"+label+"Stat'>\
-				<div class='value'>"+value+"</div>\
-				<div class='label'>"+label+"</div>\
-			</div>")
-		}
-		else // then just update its value
-		{
-			$("#" + label + "Stat .value").html(value);
-		}
+    if (current >= 0) $("#" + label + "Stat .value")[0].innerText = current;
+  },
 
-	},
+  createPanelStatistic: function () {
+    Meta.panels + 1;
+    $("#page-count-here").html("<div class='count-item'>" + Meta.panels + "</div>");
+  },
 
-	decrementStatistic: function(label)
-	{
-		var current = $("#" + label + "Stat .value")[0].innerText;
+  loadWidget: function (widgetInformation) {
+    // THIS FUNCTION IS CALLED MANY TIMES!!!!
 
-			current--;
+    var widgetSafeName = DisplayManager.capitaliseFirstLetter(widgetInformation.widgetCodeName);
 
-			if (current >= 0) $("#" + label + "Stat .value")[0].innerText = current;
+    var wd = {
+      primaryKey: widgetInformation.widgetId,
+      widgetName: widgetInformation.widgetName,
+      stateId: widgetInformation.stateId,
+      widgetCodeName: widgetInformation.widgetCodeName,
+      widgetSafeName: widgetSafeName,
+      jsonData: widgetInformation.widgetData,
+    };
 
-	},
+    // ensure that theres some parsable json for empty states
+    if (!wd.jsonData) wd.jsonData = '{"items":[]}';
 
-	createPanelStatistic: function()
-	{
-		Meta.panels + 1;
-		$("#page-count-here").html("<div class='count-item'>" + Meta.panels + "</div>")
-	},
-
-	loadWidget: function(widgetInformation)
-	{
-		// THIS FUNCTION IS CALLED MANY TIMES!!!!
-
-		var widgetSafeName = DisplayManager.capitaliseFirstLetter(widgetInformation.widgetCodeName);
-
-		var wd = {
-				primaryKey: widgetInformation.widgetId,
-				widgetName: widgetInformation.widgetName,
-				stateId: widgetInformation.stateId,
-				widgetCodeName: widgetInformation.widgetCodeName,
-				widgetSafeName: widgetSafeName,
-				jsonData: widgetInformation.widgetData
-			};
-
-		// ensure that theres some parsable json for empty states
-		if (!wd.jsonData) wd.jsonData = '{"items":[]}';
-
-			wd = JSON.stringify(wd)
-		// create a skeleton for each widget
-		$("#content-here").append("<div class='row full-page-panel ui stackable 2 column grid' id='"+widgetInformation.widgetCodeName+"-widget' data-widget="+widgetInformation.widgetCodeName+">\
+    wd = JSON.stringify(wd);
+    // create a skeleton for each widget
+    $("#content-here").append(
+      "<div class='row full-page-panel ui stackable 2 column grid' id='" +
+        widgetInformation.widgetCodeName +
+        "-widget' data-widget=" +
+        widgetInformation.widgetCodeName +
+        ">\
 				<div class='three wide column'>&nbsp;</div>\
 				<div class='thirteen wide column content-area'></div>\
-			</div>");
+			</div>"
+    );
 
-		// inject the template html
-		$("#" + widgetInformation.widgetCodeName + "-widget .content-area").load("../homepage/widgets" + widgetInformation.widgetPath, function(){
-			// add the json to localstorage
-			var stored = UserManager.addToLocalStorage(widgetInformation.widgetCodeName, wd);
+    // inject the template html
+    $("#" + widgetInformation.widgetCodeName + "-widget .content-area").load("../homepage/widgets" + widgetInformation.widgetPath, function () {
+      // add the json to localstorage
+      var stored = UserManager.addToLocalStorage(widgetInformation.widgetCodeName, wd);
 
-			// dynamically call the initialisation method located in the template's own code to render the widget data
+      // dynamically call the initialisation method located in the template's own code to render the widget data
 
-			window[widgetSafeName].init(stored);
-		});
+      window[widgetSafeName].init(stored);
+    });
 
-		// load navigation
-		$("#navigation-here").append("<div class='navigation-item column' id='" + widgetInformation.widgetName + "-navigation'>"+ widgetInformation.widgetName+ "</div>");
-		$(".navigation-item:first-child").addClass("active-nav");
+    // load navigation
+    $("#navigation-here").append("<div class='navigation-item column' id='" + widgetInformation.widgetName + "-navigation'>" + widgetInformation.widgetName + "</div>");
+    $(".navigation-item:first-child").addClass("active-nav");
 
-		this.createPanelStatistic();
+    this.createPanelStatistic();
 
-		$("#" + widgetInformation.widgetName + "-navigation").click(function(){
+    $("#" + widgetInformation.widgetName + "-navigation").click(function () {
+      $(".navigation-item").removeClass("active-nav");
+      $("#" + widgetInformation.widgetName + "-navigation").addClass("active-nav");
 
-				$(".navigation-item").removeClass("active-nav");
-				$("#" + widgetInformation.widgetName + "-navigation").addClass("active-nav");
+      var ident = widgetInformation.widgetName.toLowerCase();
 
-				var ident = widgetInformation.widgetName.toLowerCase();
+      $.scrollify.move("#" + ident);
+    });
 
-				$.scrollify.move("#" + ident);
+    // make the panels scrollable
+    UserManager.applyScrollify();
+  },
 
-		});
+  applyScrollify: function (destroy) {
+    if (destroy) $.scrollify.disable();
+    else {
+      $.scrollify({
+        section: ".full-page-panel",
+        sectionName: "widget",
+        easing: "easeOutExpo",
+        scrollSpeed: 1000,
+        scrollbars: false,
+        after: function (event) {
+          // event is just the number of the panel
+          var name = $.scrollify.current();
+          name = name[0].id;
+          name = name.split("-")[0];
+          name = DisplayManager.capitaliseFirstLetter(name);
 
-		// make the panels scrollable
-		UserManager.applyScrollify();
-	},
+          DisplayManager.focusNavLink(name);
+        },
+      });
+      $.scrollify.enable();
+    }
+  },
 
-	applyScrollify: function(destroy)
-	{
-		if (destroy) $.scrollify.disable();
-		else
-		{
-			$.scrollify({
-				section: 		".full-page-panel",
-				sectionName: 	"widget",
-				easing: 		"easeOutExpo",
-				scrollSpeed: 	1000,
-				scrollbars: 	false,
-				after: 		function(event){
-					// event is just the number of the panel
-					var name = $.scrollify.current();
-						name = name[0].id;
-						name = name.split("-")[0];
-						name = DisplayManager.capitaliseFirstLetter(name);
+  introduction: function (returned) {
+    var auth = UserManager.usersAuth();
+    if (!returned) {
+      UserManager.ajaxHandler("GET", "rest-backend/api/widget", null, UserManager.introduction, auth.cookieString);
+    } else {
+      var username = auth.cookie.username;
+      var modalHeader = "Howdy, " + username + "!";
+      var parsed = JSON.parse(returned);
+      var modalContent = "<div class='widget-selector'><div class='widget-header'>Widgets are the things that give the site extra spice. Select some to start: </div>";
 
-					DisplayManager.focusNavLink(name);
-				}
-			});
-			$.scrollify.enable();
-		}
+      for (item = 0; item < parsed.length; item++) {
+        modalContent += "<div class='widget-selector-item row'><div class='widget-name ui toggle checkbox column-4'><input type='checkbox' name='public' tabindex='0' class='hidden' id='" + parsed[item].w_codeName + "Widget' data-widget-id='" + parsed[item].w_id + "'><label>" + parsed[item].w_name + "</label></div><div class='widget-desc column-6'>" + parsed[item].w_desc + "</div></div>";
+      }
 
-	},
+      modalContent += "</div>";
 
-	introduction: function(returned)
-	{
-		var auth = UserManager.usersAuth();
-		if (!returned)
-		{
-			UserManager.ajaxHandler("GET", "rest-backend/api/widget", null, UserManager.introduction, auth.cookieString);
-		}
-		else
-		{
-			var username = auth.cookie.username;
-			var modalHeader = "Howdy, " + username + "!";
-			var parsed = JSON.parse(returned);
-			var modalContent = "<div class='widget-selector'><div class='widget-header'>Widgets are the things that give the site extra spice. Select some to start: </div>";
+      UserManager.createModal(auth, modalHeader, modalContent, UserManager.firstWidgets);
+    }
+  },
 
-			for (item = 0; item < parsed.length; item++)
-			{
-				modalContent+= "<div class='widget-selector-item row'><div class='widget-name ui toggle checkbox column-4'><input type='checkbox' name='public' tabindex='0' class='hidden' id='"+parsed[item].w_codeName+"Widget' data-widget-id='"+parsed[item].w_id+"'><label>"+parsed[item].w_name+"</label></div><div class='widget-desc column-6'>"+ parsed[item].w_desc +"</div></div>"
-			}
-
-			modalContent+= "</div>";
-
-			UserManager.createModal(auth, modalHeader, modalContent, UserManager.firstWidgets);
-		}
-	},
-
-	createModal: function(info, modalHeader, modalContent, eventListenerConfig)
-	{
-		$("body").prepend("<div class='ui modal' id='modal'>\
+  createModal: function (info, modalHeader, modalContent, eventListenerConfig) {
+    $("body").prepend(
+      "<div class='ui modal' id='modal'>\
 			<i class='close icon'></i>\
-			<div class='header modal-header'>" + modalHeader + "</div>\
-			<div class='modal-content'>" + modalContent +"</div>\
+			<div class='header modal-header'>" +
+        modalHeader +
+        "</div>\
+			<div class='modal-content'>" +
+        modalContent +
+        "</div>\
 			<div class='actions'>\
 				<div class='ui green button' id='add-item-modal'>Cool</div>\
 			</div>\
-		</div>");
-		$('.ui.checkbox').checkbox();
-		$('.ui.modal').modal('show');
+		</div>"
+    );
+    $(".ui.checkbox").checkbox();
+    $(".ui.modal").modal("show");
 
-		// this is a callback - it will be named something else! look at the caller!
-		eventListenerConfig();
-	},
+    // this is a callback - it will be named something else! look at the caller!
+    eventListenerConfig();
+  },
 
-	firstWidgets: function()
-	{
-		$("#add-item-modal").click(function(){
+  firstWidgets: function () {
+    $("#add-item-modal").click(function () {
+      // find out the id's of the widgets the user chose to add
+      var states = [];
 
-			// find out the id's of the widgets the user chose to add
-			var states = [];
+      $(".ui.checkbox input").each(function () {
+        var $this = $(this);
+        if ($this.is(":checked")) states.push($this.context.dataset.widgetId);
+      });
 
-			$(".ui.checkbox input").each(function(){
-				var $this = $(this);
-				if ($this.is(":checked")) states.push($this.context.dataset.widgetId);
-			});
+      // create a blank state for each of them using the api
+      var auth = UserManager.usersAuth();
+      var count = 0;
+      var num = states.length;
 
-			// create a blank state for each of them using the api
-			var auth = UserManager.usersAuth();
-			var count = 0;
-			var num = states.length;
+      for (statePointer = 0; statePointer < states.length; statePointer++) {
+        var payload = {
+          userId: auth.cookie.userId,
+          widgetId: states[statePointer],
+        };
 
+        $.when(UserManager.ajaxHandler("POST", "rest-backend/api/state", payload, function () {}, auth.cookieString)).then(function () {
+          count++;
+          if (count === num) {
+            UserManager.getUsersProfile(UserManager.parseUsersProfile);
+            DisplayManager.removeModalFromDom();
+          }
+        });
+      }
+    });
+  },
 
-			for (statePointer = 0; statePointer < states.length; statePointer++)
-			{
-				var payload = {
-					"userId" : auth.cookie.userId,
-					"widgetId" : states[statePointer]
-				};
+  addToLocalStorage: function (identifier, data) {
+    localStorage.setItem(identifier, data);
 
-				$.when(UserManager.ajaxHandler("POST", "rest-backend/api/state", payload, function(){}, auth.cookieString)).then(function(){
-					count++;
-					if (count === num) 
-					{
-						UserManager.getUsersProfile(UserManager.parseUsersProfile);
-						DisplayManager.removeModalFromDom();
-					}
-				});
-			}
-		});
-	},
+    return localStorage.getItem(identifier);
+  },
 
-	addToLocalStorage: function(identifier, data)
-	{
-		localStorage.setItem(identifier, data);
+  returnUserPrimary: function () {
+    // returns the primary key of the currently logged in user from the cookie
+    var userId = UserManager.usersAuth();
+    userId = JSON.parse(userId.cookieString);
+    userId = userId.userId;
 
-		return localStorage.getItem(identifier);
-	},
+    return userId;
+  },
 
-	returnUserPrimary: function()
-	{
-		// returns the primary key of the currently logged in user from the cookie
-		var userId = UserManager.usersAuth();
-			userId = JSON.parse(userId.cookieString)
-			userId = userId.userId;
+  returnWidgetPrimary: function (codeName) {
+    // finds the value in localStorage and returns the primary key associated with it
+    var store = localStorage.getItem(codeName);
+    store = JSON.parse(store);
+    store = store.primaryKey;
 
-		return userId;
-	},
+    return store;
+  },
 
-	returnWidgetPrimary: function(codeName)
-	{
-		// finds the value in localStorage and returns the primary key associated with it
-		var store = localStorage.getItem(codeName);
-			store = JSON.parse(store);
-			store = store.primaryKey;
+  returnStatePrimary: function (codeName) {
+    // finds the value in localStorage and returns the primary key associated with it
+    var store = localStorage.getItem(codeName);
+    store = JSON.parse(store);
+    store = store.stateId;
 
-		return store;
-	},
+    return store;
+  },
 
-	returnStatePrimary: function(codeName)
-	{
-		// finds the value in localStorage and returns the primary key associated with it
-		var store = localStorage.getItem(codeName);
-			store = JSON.parse(store);
-			store = store.stateId;
+  returnStateData: function (codeName) {
+    // finds the value in localStorage and returns the primary key associated with it
+    var store = localStorage.getItem(codeName);
+    store = JSON.parse(store);
+    store = store.jsonData;
 
-		return store;
-	},
-
-	returnStateData: function(codeName)
-	{
-		// finds the value in localStorage and returns the primary key associated with it
-		var store = localStorage.getItem(codeName);
-			store = JSON.parse(store);
-			store = store.jsonData;
-
-		return store;
-	},
-
+    return store;
+  },
 };
 
 var DisplayManager = {
+  removeModalFromDom: function () {
+    $("#modal").fadeOut("slow", function () {
+      $("#modal").remove();
+      $(".ui.dimmer.modals").remove();
+    });
+  },
 
-	removeModalFromDom: function()
-	{
-		$("#modal").fadeOut("slow", function()
-		{
-			$("#modal").remove();
-			$(".ui.dimmer.modals").remove()
-		});
-	},
+  capitaliseFirstLetter: function (string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+  },
 
-	capitaliseFirstLetter: function(string)
-	{
-    	return string.charAt(0).toUpperCase() + string.slice(1);
-	},
+  focusNavLink: function (identifier) {
+    $(".navigation-item").removeClass("active-nav");
+    $("#" + identifier + "-navigation").addClass("active-nav");
+  },
 
-	focusNavLink: function(identifier)
-	{
-		$(".navigation-item").removeClass("active-nav");
-		$("#" + identifier + "-navigation").addClass("active-nav");
-	},
-
-	createBlankModal: function()
-	{
-		$("body").prepend("<div class='ui modal' id='modal'>\
+  createBlankModal: function () {
+    $("body").prepend(
+      "<div class='ui modal' id='modal'>\
 			<i class='close icon'></i>\
 			<div class='header modal-header'></div>\
 			<div class='modal-content'>\
@@ -370,27 +342,24 @@ var DisplayManager = {
 			<div class='actions'>\
 				<div class='ui white button' id='cancel-modal'>Cancel</div>\
 				<div class='ui blue button' id='add-item-modal'>Add</div>\
-			</div>");
-	}
-
-}
+			</div>"
+    );
+  },
+};
 
 // GO!
-$(document).ready(function() {
+$(document).ready(function () {
+  // all requests are authenticated by the api (tokenAuth.php is middleware which runs on each request)
 
-	// all requests are authenticated by the api (tokenAuth.php is middleware which runs on each request)
+  UserManager.getUsersProfile(UserManager.parseUsersProfile);
 
-	UserManager.getUsersProfile(UserManager.parseUsersProfile);
-
-	// add an event listener to allow log out
-	$("#signOut").click(function(){
-		UserManager.signOut()
-	});
-
+  // add an event listener to allow log out
+  $("#signOut").click(function () {
+    UserManager.signOut();
+  });
 });
 
-	
-	/*
+/*
 
 	// now, the meat
 
@@ -460,9 +429,3 @@ $(document).ready(function() {
 
 	UserMan.getUserProfile();
 */
-
-
-
-
-
-
